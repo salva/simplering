@@ -16,26 +16,26 @@ object Gui {
  
     Gtk.init(args)
  
-    val window = new Window
+    val window = new Window()
     val layout1 = new VBox(false, 3)
     val layout2 = new HBox(false, 3)
     val layout3 = new VBox(false, 3)
     val drawing = new DrawingArea()
-    val go_button = new Button("Go")
-    val radius_scale = new HScale(1, 1000, 1)
-    val n_scale = new HScale(1, 100, 1)
+    val goButton = new Button("Go")
+    val radiusScale = new HScale(1, 1000, 1)
+    val nScale = new HScale(1, 100, 1)
 
     window.setDefaultSize(150, 150)
     window.add(layout1)
     layout1.packStart(drawing, true, true, 0)
     layout1.packStart(layout2, false, true, 0)
     layout2.packStart(layout3, true, true, 0)
-    layout3.packStart(radius_scale, true, true, 0)
-    layout3.packStart(n_scale, true, true, 0)
-    layout2.packStart(go_button, false, true, 0)
+    layout3.packStart(radiusScale, true, true, 0)
+    layout3.packStart(nScale, true, true, 0)
+    layout2.packStart(goButton, false, true, 0)
 
-    radius_scale.setValue((radius * 1000).toInt)
-    n_scale.setValue(n)
+    radiusScale.setValue((radius * 1000).toInt)
+    nScale.setValue(n)
 
     window.showAll()
     generate()
@@ -63,7 +63,7 @@ object Gui {
       drawing.queueDraw()
     }
  
-    radius_scale.connect( new Range.ValueChanged {
+    radiusScale.connect( new Range.ValueChanged {
       def onValueChanged(source: Range) {
         val old_radius = radius
         radius = 0.001 * source.getValue
@@ -74,7 +74,7 @@ object Gui {
         }
       }})
 
-    n_scale.connect( new Range.ValueChanged {
+    nScale.connect( new Range.ValueChanged {
       def onValueChanged(source: Range) {
         val old_n = n
         n = source.getValue.toInt
@@ -93,7 +93,7 @@ object Gui {
         false
       }})
  
-    go_button.connect( new Button.Clicked() {
+    goButton.connect( new Button.Clicked() {
       def onClicked(b:Button) = {
         generate()
       }})
