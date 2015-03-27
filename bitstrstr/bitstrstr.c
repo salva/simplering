@@ -86,47 +86,26 @@ bitstrstr(const unsigned char *haystack, int haystack_bitlen, const unsigned cha
     }
 
     i = needle_bitlen - 1;
-    i_byte = (i - 7) >> 3;
     while (i < haystack_bitlen) {
-        int window = (haystack[i_byte - 1] | (haystack[i_byte] << 8));
-        dump_window("window at byte", window);
-        dump_bitstr("      haystack", haystack + i_byte - 1, 0, 16);
-        fprintf(stderr,
-                "jump %d, from (%d) %d to %d (%d)\n",
-                jump[window & 0xffff],
-                i,
-                (i_byte << 3) + 7,
-                (i_byte << 3) + 7 + jump[window & 0xffff],
-                ((((((i_byte << 3) + 7 + jump[window & 0xffff]) - 7) >> 3) << 3) + 7));
-        i = (i_byte << 3) + 7 + jump[window & 0xffff];
-        while (i < haystack_bitlen) {
-            int window_jump;
-            int i_next_byte = (i - 7) >> 3;
+        int i_byte = (i - 7) >> 3;
+        
+        int window = (haystack[i_byte - 1] | (haystack[i_byte] << 8) | (haystack[i_byte + 1] << 16));
+        window >>= ((i - 7) & 0x7);
 
-            if (i_next_byte > i_byte) {
-                i_byte = i_next_byte;
-                break;
-            }
+        dump_window(" window at bit", window);
+        dump_bitstr("      haystack", haystack, i - 15, 16);
+        dump_bitstr("   needle tail", needle, needle_bitlen - 16, 16);
+        dump_bitstr("        needle", needle, 0, needle_bitlen);
+        fprintf(stderr, "jump %d, from %d to %d\n", jump[window & 0xffff], i, i + jump[window & 0xffff]);
             
-            window = (haystack[i_byte - 1] | (haystack[i_byte] << 8) | (haystack[i_byte + 1] << 16));
-            dump_window("window at bit0", window);
-            window >>= ((i - 7) & 0x7);
-
-            dump_window(" window at bit", window);
-            dump_bitstr("      haystack", haystack, i - 15, 16);
-            dump_bitstr("   needle tail", needle, needle_bitlen - 16, 16);
-            dump_bitstr("        needle", needle, 0, needle_bitlen);
-            fprintf(stderr, "jump %d, from %d to %d\n", jump[window & 0xffff], i, i + jump[window & 0xffff]);
-            
-            window_jump = jump[window & 0xffff];
-            if (window_jump)
-                i += window_jump;
-            else {
-                int offset = i - needle_bitlen + 1;
-                if (slow_check(haystack, offset, needle, needle_bitlen))
-                    return offset;
-                i++;
-            }
+        int window_jump = jump[window & 0xffff];
+        if (window_jump)
+            i += window_jump;
+        else {
+            int offset = i - needle_bitlen + 1;
+            if (slow_check(haystack, offset, needle, needle_bitlen))
+                return offset;
+            i++;
         }
     }
     return -1;
