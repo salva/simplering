@@ -9,7 +9,7 @@
 #define JUMP_SIZE (1 << BITS)
 
 
-#define fprintf if(0)
+//#define fprintf if(0)
 
 static int
 get_bit(const unsigned char *vector, int index) {
@@ -57,12 +57,13 @@ dump_window(const char *title, unsigned int window) {
 }
 
 static int
-slow_check(const unsigned char *haystack, int offset, const unsigned char *needle, int needle_bitlen) {
+slow_check(const unsigned char *haystack, int offset,
+           const unsigned char *needle, int needle_bitoff, int needle_bitlen) {
     int i;
-    dump_bitstr("slow_check needle", needle, 0, needle_bitlen);
+    dump_bitstr("slow_check needle", needle, needle_bitoff, needle_bitlen);
     dump_bitstr("         haystack", haystack, offset, needle_bitlen);
     for (i = 0; i < needle_bitlen; i++, offset++)
-        if (get_bit(haystack, offset) != get_bit(needle, i))
+        if (get_bit(haystack, offset) != get_bit(needle, i + needle_bitoff))
             return 0;
     return 1;
 }
@@ -93,17 +94,28 @@ bm_jump[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
 	      74832, 77825, 80938, 84175, 87542, 91043, 94684, 98471,
 	      102409, 106505, 110765, 115195, 119802 };
 
+//int
+//bitstrstr(const unsigned char *haystack, int haystack_bitlen,
+//          const unsigned char *needle, int needle_bitlen) {
+
 int
-bitstrstr(const unsigned char *haystack, int haystack_bitlen, const unsigned char *needle, int needle_bitlen) {
+bitstrstr(const unsigned char *haystack, int haystack_bitoff, int haystack_bitlen,
+          const unsigned char *needle, int needle_bitoff, int needle_bitlen) {
     unsigned int jump[JUMP_SIZE];
     int i, dist, j, j8, i_byte;
     unsigned int window;
 
-    for (i = 0; i < JUMP_SIZE; i++) jump[i] = needle_bitlen - (BITS - 1);
+    for (i = 0; i < JUMP_SIZE; i++) jump[i] = needle_bitlen - BITS;
 
-    window = ((needle[1] << 8) | needle[0]);
-    for (dist = needle_bitlen - BITS, j = 2, j8 = 0; dist >= 0; dist--) {
+    j = needle_bitoff >> 3;
+    window  = needle[j++];
+    window |= needle[j++] << 8;
+    window |= needle[j++] << 16;
+    window >>= (needle_bitoff & 0x7);
+    j8 = 8 - (needle_bitoff & 0x7);
 
+    dist = needle_bitlen - (BITS - 1);
+    while (dist-- > 0) {
         fprintf(stderr, "dist: %d, j: %d\n", dist, j);
         dump_window("jump", window);
         jump[window & MASK] = dist;
@@ -148,8 +160,8 @@ bitstrstr(const unsigned char *haystack, int haystack_bitlen, const unsigned cha
 
             dump_window(" window at bit", window);
             dump_bitstr("      haystack", haystack, i, BITS);
-            dump_bitstr("   needle tail", needle, needle_bitlen - BITS, 16);
-            dump_bitstr("        needle", needle, 0, needle_bitlen);
+            dump_bitstr("   needle tail", needle, needle_bitoff + needle_bitlen - BITS, 16);
+            dump_bitstr("        needle", needle, needle_bitoff, needle_bitlen);
             fprintf(stderr, "jump %d, from %d to %d\n", jump[window & MASK], i, i + jump[window & MASK]);
             
             window_jump = jump[window & MASK];
@@ -157,7 +169,7 @@ bitstrstr(const unsigned char *haystack, int haystack_bitlen, const unsigned cha
                 i += window_jump;
             else {
                 int offset = i - (needle_bitlen - BITS);
-                if (slow_check(haystack, offset, needle, needle_bitlen))
+                if (slow_check(haystack, offset, needle, needle_bitoff, needle_bitlen))
                     return offset;
                 i++;
             }
@@ -236,18 +248,19 @@ read_chrono(void) {
 int
 main(int argc, char *argv[]) {
     const unsigned char *haystack, *needle;
-    int haystack_bytelen, needle_offset, needle_bitlen, r, i, reps;
+    int haystack_bytelen, needle_offset, needle_prefix, needle_bitlen, r, i, reps;
     double chrono;
     
-    if ((argc < 4) || (argc > 5)) {
-        fprintf(stderr, "usage: %s haystack_filename needle_offset needle_bitlen reps\n", argv[0]);
+    if ((argc < 4) || (argc > 6)) {
+        fprintf(stderr, "usage: %s haystack_filename needle_offset needle_bitlen needle_prefix reps\n", argv[0]);
         exit(1);
     }
 
     haystack = read_file(argv[1], &haystack_bytelen);
     needle_offset = atoi(argv[2]);
     needle_bitlen = atoi(argv[3]);
-    reps = (argc == 5 ? atoi(argv[4]) : 1);
+    needle_prefix = (argc >= 5 ? atoi(argv[4]) : 0);
+    reps = (argc >= 6 ? atoi(argv[5]) : 1);
 
     if (needle_bitlen + needle_offset > haystack_bytelen * 8) {
         fprintf(stderr, "not enough bits for needle\n");
@@ -256,13 +269,13 @@ main(int argc, char *argv[]) {
 
     dump_bitstr("needle in haystack", haystack, needle_offset, needle_bitlen);
 
-    needle = get_needle(haystack, needle_offset, needle_bitlen);
+    needle = get_needle(haystack, needle_offset - needle_prefix, needle_bitlen + needle_prefix);
 
-    dump_bitstr("            needle", needle, 0, needle_bitlen);
+    dump_bitstr("            needle", needle, needle_prefix, needle_bitlen);
 
     start_chrono();
     for (i = 0; i < reps; i++)
-        r = bitstrstr(haystack, haystack_bytelen << 3, needle, needle_bitlen);
+        r = bitstrstr(haystack, 0, haystack_bytelen << 3, needle, needle_prefix, needle_bitlen);
     chrono = read_chrono();
     
     printf("needle found at %d, expected at %d in %g/%d = %gms\n", r, needle_offset, chrono * 1000, reps, 1000 * chrono / reps);
