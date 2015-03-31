@@ -202,17 +202,18 @@ read_chrono(void) {
 int
 main(int argc, char *argv[]) {
     const unsigned char *haystack, *needle;
-    int haystack_bytelen, needle_offset, needle_bitlen, r;
+    int haystack_bytelen, needle_offset, needle_bitlen, r, i, reps;
     double chrono;
     
-    if (argc != 4) {
-        fprintf(stderr, "usage: %s haystack_filename needle_offset needle_bitlen\n", argv[0]);
+    if ((argc < 4) || (argc > 5)) {
+        fprintf(stderr, "usage: %s haystack_filename needle_offset needle_bitlen reps\n", argv[0]);
         exit(1);
     }
 
     haystack = read_file(argv[1], &haystack_bytelen);
     needle_offset = atoi(argv[2]);
     needle_bitlen = atoi(argv[3]);
+    reps = (argc == 5 ? atoi(argv[4]) : 1);
 
     if (needle_bitlen + needle_offset > haystack_bytelen * 8) {
         fprintf(stderr, "not enough bits for needle\n");
@@ -226,10 +227,11 @@ main(int argc, char *argv[]) {
     dump_bitstr("            needle", needle, 0, needle_bitlen);
 
     start_chrono();
-    r = bitstrstr(haystack, haystack_bytelen << 3, needle, needle_bitlen);
+    for (i = 0; i < reps; i++)
+        r = bitstrstr(haystack, haystack_bytelen << 3, needle, needle_bitlen);
     chrono = read_chrono();
     
-    printf("needle found at %d, expected at %d in %g seconds\n", r, needle_offset, chrono);
+    printf("needle found at %d, expected at %d in %g/%d = %gms\n", r, needle_offset, chrono * 1000, reps, 1000 * chrono / reps);
     
     exit ( needle_offset == r ? 0 : 1);
 }
