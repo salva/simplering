@@ -2,8 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/timeb.h>
+#include <stdint.h>
 
-#define JUMP_SIZE (256*256)
+#define BITS 15
+#define MASK ((1 << BITS) - 1)
+#define JUMP_SIZE (1 << BITS)
+
 
 #define fprintf if(0)
 
@@ -63,66 +67,96 @@ slow_check(const unsigned char *haystack, int offset, const unsigned char *needl
     return 1;
 }
 
+static uint32_t
+bm_jump[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+	      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+	      33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+	      48, 49, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74,
+	      76, 79, 82, 85, 88, 91, 94, 97, 100, 104, 108, 112, 116, 120,
+	      124, 128, 133, 138, 143, 148, 153, 159, 165, 171, 177, 184,
+	      191, 198, 205, 213, 221, 229, 238, 247, 256, 266, 276, 287,
+	      298, 309, 321, 333, 346, 359, 373, 387, 402, 418, 434, 451,
+	      469, 487, 506, 526, 547, 568, 590, 613, 637, 662, 688, 715,
+	      743, 772, 802, 834, 867, 901, 937, 974, 1012, 1052, 1094,
+	      1137, 1182, 1229, 1278, 1329, 1382, 1437, 1494, 1553, 1615,
+	      1679, 1746, 1815, 1887, 1962, 2040, 2121, 2205, 2293, 2384,
+	      2479, 2578, 2681, 2788, 2899, 3014, 3134, 3259, 3389, 3524,
+	      3664, 3810, 3962, 4120, 4284, 4455, 4633, 4818, 5010, 5210,
+	      5418, 5634, 5859, 6093, 6336, 6589, 6852, 7126, 7411, 7707,
+	      8015, 8335, 8668, 9014, 9374, 9748, 10137, 10542, 10963,
+	      11401, 11857, 12331, 12824, 13336, 13869, 14423, 14999,
+	      15598, 16221, 16869, 17543, 18244, 18973, 19731, 20520,
+	      21340, 22193, 23080, 24003, 24963, 25961, 26999, 28078,
+	      29201, 30369, 31583, 32846, 34159, 35525, 36946, 38423,
+	      39959, 41557, 43219, 44947, 46744, 48613, 50557, 52579,
+	      54682, 56869, 59143, 61508, 63968, 66526, 69187, 71954,
+	      74832, 77825, 80938, 84175, 87542, 91043, 94684, 98471,
+	      102409, 106505, 110765, 115195, 119802 };
+
 int
 bitstrstr(const unsigned char *haystack, int haystack_bitlen, const unsigned char *needle, int needle_bitlen) {
-    int jump[JUMP_SIZE];
-    int i, i2, j, i_byte;
+    unsigned int jump[JUMP_SIZE];
+    int i, dist, j, j8, i_byte;
     unsigned int window;
 
-    for (i = 0; i < JUMP_SIZE; i++) jump[i] = needle_bitlen - 15;
+    for (i = 0; i < JUMP_SIZE; i++) jump[i] = needle_bitlen - (BITS - 1);
 
     window = ((needle[1] << 8) | needle[0]);
-    for (i = needle_bitlen - 16, i2 = 1, j = 2; i >= 0;) {
-        fprintf(stderr, "i: %d, j: %d\n", i, j);
+    for (dist = needle_bitlen - BITS, j = 2, j8 = 0; dist >= 0; dist--) {
+
+        fprintf(stderr, "dist: %d, j: %d\n", dist, j);
         dump_window("jump", window);
-        jump[window & 0xffff] = i;
-        if (--i2 == 0) {
+        jump[window & MASK] = dist;
+
+        if (!j8) {
             window |= (needle[j++] << 16);
             window |= (needle[j++] << 24);
-            i2 = 16;
+            j8 = 16;
         }
+        j8--;
         window >>= 1;
-        i--;
     }
 
-    i = needle_bitlen - 1;
-    i_byte = (i - 7) >> 3;
-    while (i < haystack_bitlen) {
-        int window = (haystack[i_byte - 1] | (haystack[i_byte] << 8));
+    i = needle_bitlen - BITS;
+    i_byte = i >> 3;
+    while (i < haystack_bitlen - BITS) {
+        int window = (haystack[i_byte] | (haystack[i_byte + 1] << 8));
+        
         dump_window("window at byte", window);
         dump_bitstr("      haystack", haystack + i_byte - 1, 0, 16);
         fprintf(stderr,
                 "jump %d, from (%d) %d to %d (%d)\n",
-                jump[window & 0xffff],
+                jump[window & MASK],
                 i,
-                (i_byte << 3) + 7,
-                (i_byte << 3) + 7 + jump[window & 0xffff],
-                ((((((i_byte << 3) + 7 + jump[window & 0xffff]) - 7) >> 3) << 3) + 7));
-        i = (i_byte << 3) + 7 + jump[window & 0xffff];
-        while (i < haystack_bitlen) {
+                (i_byte << 3),
+                (i_byte << 3) + jump[window & MASK],
+                ((((i_byte << 3) + jump[window & MASK]) >> 3) << 3));
+        
+        i = (i_byte << 3) + jump[window & MASK];
+        while (i < haystack_bitlen - BITS) {
             int window_jump;
-            int i_next_byte = (i - 7) >> 3;
+            int i_next_byte = i >> 3;
 
             if (i_next_byte > i_byte) {
                 i_byte = i_next_byte;
                 break;
             }
             
-            window = (haystack[i_byte - 1] | (haystack[i_byte] << 8) | (haystack[i_byte + 1] << 16));
+            window = (haystack[i_byte] | (haystack[i_byte + 1] << 8) | (haystack[i_byte + 2] << 16));
             dump_window("window at bit0", window);
-            window >>= ((i - 7) & 0x7);
+            window >>= (i & 0x7);
 
             dump_window(" window at bit", window);
-            dump_bitstr("      haystack", haystack, i - 15, 16);
-            dump_bitstr("   needle tail", needle, needle_bitlen - 16, 16);
+            dump_bitstr("      haystack", haystack, i, BITS);
+            dump_bitstr("   needle tail", needle, needle_bitlen - BITS, 16);
             dump_bitstr("        needle", needle, 0, needle_bitlen);
-            fprintf(stderr, "jump %d, from %d to %d\n", jump[window & 0xffff], i, i + jump[window & 0xffff]);
+            fprintf(stderr, "jump %d, from %d to %d\n", jump[window & MASK], i, i + jump[window & MASK]);
             
-            window_jump = jump[window & 0xffff];
+            window_jump = jump[window & MASK];
             if (window_jump)
                 i += window_jump;
             else {
-                int offset = i - needle_bitlen + 1;
+                int offset = i - (needle_bitlen - BITS);
                 if (slow_check(haystack, offset, needle, needle_bitlen))
                     return offset;
                 i++;
