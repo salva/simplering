@@ -9,7 +9,7 @@
 #define JUMP_SIZE (1 << BITS)
 
 
-//#define fprintf if(0)
+#define fprintf if(0)
 
 static int
 get_bit(const unsigned char *vector, int index) {
