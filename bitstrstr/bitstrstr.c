@@ -9,7 +9,7 @@
 #define JUMP_SIZE (1 << BITS)
 
 
-#define fprintf if(0)
+//#define fprintf if(0)
 
 static int
 get_bit(const unsigned char *vector, int index) {
@@ -69,7 +69,7 @@ slow_check(const unsigned char *haystack, int offset,
 }
 
 static uint32_t
-bm_jump[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+delta[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
 	      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
 	      33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
 	      48, 49, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74,
@@ -101,17 +101,17 @@ bm_jump[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
 int
 bitstrstr(const unsigned char *haystack, int haystack_bitoff, int haystack_bitlen,
           const unsigned char *needle, int needle_bitoff, int needle_bitlen) {
-    unsigned char jump_ix, jump[JUMP_SIZE];
-    int i, dist, j, j8, start;
+    unsigned char delta_ix, jump[JUMP_SIZE];
+    int dist, j, j8, start;
     unsigned int window;
 
     dist = needle_bitlen - (BITS - 1);
-    for (jump_ix = 255; bm_jump[jump_ix] > dist; jump_ix--);
-    memset(jump, jump_ix, sizeof(jump));
+    for (delta_ix = 255; delta[delta_ix] > dist; delta_ix--);
+    memset(jump, delta_ix, sizeof(jump));
 
     // don't check what we know that it can't be better
-    start = needle_bitoff + dist - bm_jump[jump_ix];
-    dist = bm_jump[jump_ix];
+    start = needle_bitoff + dist - delta[delta_ix];
+    dist = delta[delta_ix];
     
     j = start >> 3;
     window  = needle[j++];
@@ -124,8 +124,8 @@ bitstrstr(const unsigned char *haystack, int haystack_bitoff, int haystack_bitle
         fprintf(stderr, "dist: %d, j: %d\n", dist, j);
         dump_window("jump", window);
 
-        if (bm_jump[jump_ix] > dist) jump_ix--;
-        jump[window & MASK] = jump_ix;
+        if (delta[delta_ix] > dist) delta_ix--;
+        jump[window & MASK] = delta_ix;
         
         if (!j8) {
             window |= (needle[j++] << 16);
@@ -136,42 +136,46 @@ bitstrstr(const unsigned char *haystack, int haystack_bitoff, int haystack_bitle
         window >>= 1;
     }
 
-    int i_byte = (needle_bitlen - BITS) >> 3;
-    int haystack_top_byte = (haystack_bitlen - BITS) >> 3;
-    
-    while (i_byte <= haystack_top_byte) {
-        int window = (haystack[i_byte] | (haystack[i_byte + 1] << 8));
-        int jump_ix = jump[window & MASK];
+    const unsigned char *pivot_top = haystack + ((haystack_bitoff + haystack_bitlen - BITS) >> 3) + 1;
+    const unsigned char *pivot = haystack + ((haystack_bitoff + needle_bitlen - BITS) >> 3);
 
-        if (jump_ix >= 8) {
-            i_byte += bm_jump[jump_ix] >> 3;
+    while (pivot < pivot_top) {
+        int window = (pivot[0] | (pivot[1] << 8));
+        int delta_ix = jump[window & MASK];
+
+        if (delta_ix > 8) {
+            pivot += delta[delta_ix] >> 3;
         }
         else {
-            int i = (i_byte << 3) + jump_ix;
-            window |= haystack[i_byte + 2] << 16;
-            window >>= jump_ix;
+            int i = delta_ix;
+            window |= pivot[2] << 16;
+            window >>= delta_ix;
 
-            while ((jump_ix = jump[window & MASK]) < 8) {
-                if (!jump_ix) {
-                    int offset = i - (needle_bitlen - BITS); 
-                    if (slow_check(haystack, offset, needle, needle_bitoff, needle_bitlen)) {
-                        if (i <= haystack_bitlen - BITS)
-                            return offset;
-                        return -1;
+            while ((delta_ix = jump[window & MASK]) <= 8) {
+                if (!delta_ix) {
+                    int pivot_offset = i - (needle_bitlen - BITS); 
+                    if (slow_check(pivot, pivot_offset, needle, needle_bitoff, needle_bitlen - BITS)) {
+                        int offset = pivot_offset + ((pivot - haystack) << 3);
+                        if (offset >= haystack_bitoff) {
+                            if (offset < haystack_bitlen + haystack_bitoff)
+                                return offset;
+                            return -1;
+                        }
                     }
-                    jump_ix = 1;
+                    delta_ix = 1;
                 }
 
-                i += jump_ix;
-                window >>= jump_ix;
+                i += delta_ix;
+                window >>= delta_ix;
 
-                if (i >> 3 > i_byte) {
-                    if (++i_byte > haystack_top_byte)
+                if (i > 8) {
+                    if (++pivot >= pivot_top)
                         return -1;
-                    window |= haystack[i_byte + 2] << (16 - (i & 0x7));
+                    i -= 8;
+                    window |= pivot[2] << (16 - i);
                 }
             }
-            i_byte = (i + bm_jump[jump_ix]) >> 3;
+            pivot += (i + delta[delta_ix]) >> 3;
         }
     }
     return -1;
