@@ -7,19 +7,18 @@ use Text::Wrap qw(wrap);
 
 my $f = 1.04;
 
-my @jumps;
+my @jumps = 0..64;
 
-my $current = 0;
-for my $i (0..255) {
-    push @jumps, $current;
-    #printf "%d: %d (%f)\n", $i, $current, log($current||1)/log(10);
+my $current = 9;
+for my $i (65 .. 255) {
+    push @jumps, $current * 8;
     my $next = int ($current * $f);
     $next++ if $next == $current;
     $current = $next;
 }
 
 print("static uint32_t\n",
-      wrap('bm_jump[] = [ ',
-           '              ',
-           join(', ', @jumps))." ];\n");
+      wrap('delta[256] = { ',
+           '               ',
+           join(', ', @jumps))." };\n");
 
