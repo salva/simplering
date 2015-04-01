@@ -101,9 +101,9 @@ bm_jump[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
 int
 bitstrstr(const unsigned char *haystack, int haystack_bitoff, int haystack_bitlen,
           const unsigned char *needle, int needle_bitoff, int needle_bitlen) {
-    unsigned char jump[JUMP_SIZE];
+    unsigned char jump_ix, jump[JUMP_SIZE];
     unsigned int exp_jump[JUMP_SIZE];
-    int i, dist, j, j8, jump_ix;
+    int i, dist, j, j8;
     unsigned int window;
 
     dist = needle_bitlen - (BITS - 1);
@@ -121,9 +121,9 @@ bitstrstr(const unsigned char *haystack, int haystack_bitoff, int haystack_bitle
     while (dist-- > 0) {
         fprintf(stderr, "dist: %d, j: %d\n", dist, j);
         dump_window("jump", window);
-        jump[window & MASK] = dist;
 
         if (bm_jump[jump_ix] > dist) jump_ix--;
+        jump[window & MASK] = jump_ix;
         
         if (!j8) {
             window |= (needle[j++] << 16);
