@@ -191,7 +191,7 @@ read_file(const char *fn, int *size) {
     int allocated = 0;
     int readed = 0;
     
-    fh = fopen(fn, "r");
+    fh = fopen(fn, "rb");
     if (!fh) {
         perror(fn);
         exit(1);
