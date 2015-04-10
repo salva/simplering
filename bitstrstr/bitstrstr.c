@@ -8,7 +8,6 @@
 #define MASK ((1 << BITS) - 1)
 #define JUMP_SIZE (1 << BITS)
 
-
 #define fprintf if(0)
 
 static int
