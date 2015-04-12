@@ -1,3 +1,8 @@
+
+;; Solution to StackOverflow question at:
+;; http://stackoverflow.com/questions/29555741/touching-segments
+
+
 (ql:quickload "alexandria")
 
 (defun sort-and-unique-aux (sorted last done)
@@ -102,4 +107,9 @@
                   (aref decompress best-b)
                   best))))))
 
-(find-two-best '((2 3) (1 3) (1 5) (3 4) (4 5)))
+;; try as...
+;;   (find-two-best '((2 3) (1 3) (1 5) (3 4) (4 5)))
+;;   (find-two-best '((1 2) (1 3) (2 3) (1 4) (1 5)))
+;;   (find-two-best '((1 2) (3 4) (5 6)))
+
+;; Only tested under SBCL
